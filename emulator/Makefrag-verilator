@@ -31,19 +31,31 @@ $(generated_dir)/$(long_name).behav_srams.v : $(generated_dir)/$(long_name).conf
 
 # Build and install our own Verilator, to work around versionining issues.
 VERILATOR_VERSION ?= $(shell cat $(base_dir)/verilator.hash)
-VERILATOR_SRCDIR ?= verilator/
+VERILATOR_SRCDIR ?= verilator/src/verilator-$(VERILATOR_VERSION)
 VERILATOR_TARGET := $(abspath verilator/install/bin/verilator)
 INSTALLED_VERILATOR ?= $(VERILATOR_TARGET)
+$(VERILATOR_TARGET): $(VERILATOR_SRCDIR)/bin/verilator
+	$(MAKE) -C $(VERILATOR_SRCDIR) installbin installdata
+	touch $@
 
-$(VERILATOR_TARGET): $(VERILATOR_SRCDIR)
+$(VERILATOR_SRCDIR)/bin/verilator: $(VERILATOR_SRCDIR)/Makefile
+	$(MAKE) -C $(VERILATOR_SRCDIR) verilator_bin
+	touch $@
 
-	
-$(VERILATOR_SRCDIR): verilator
-	cd $(dir $@) && autoconf && ./configure --prefix=$(abspath verilator/install) && make -j8 && make install
+$(VERILATOR_SRCDIR)/Makefile: $(VERILATOR_SRCDIR)/configure
+	mkdir -p $(dir $@)
+	cd $(dir $@) && ./configure CFG_CXXFLAGS_STD_NEWEST=-std=c++17 --prefix=$(abspath verilator/install)
 
+$(VERILATOR_SRCDIR)/configure: verilator/verilator-$(VERILATOR_VERSION).tar.gz
+	rm -rf $(dir $@)
+	mkdir -p $(dir $@)
+	cat $^ | tar -xz --strip-components=1 -C $(dir $@)
+	cd $(dir $@) && autoconf
+	touch $@
 
-verilator/:
-	git clone https://github.com/verilator/verilator && unset VERILATOR_ROOT && cd verilator && git pull && git checkout v$(VERILATOR_VERSION)
+verilator/verilator-$(VERILATOR_VERSION).tar.gz:
+	mkdir -p $(dir $@)
+	# wget https://github.com/verilator/verilator/archive/refs/tags/v$(VERILATOR_VERSION).tar.gz -O $@
 
 verilator: $(INSTALLED_VERILATOR)
 
