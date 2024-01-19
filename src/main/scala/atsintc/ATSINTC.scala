@@ -13,7 +13,16 @@ import freechips.rocketchip.util._
 object ATSINTCConsts {
   def base: BigInt = 0x10000000
   def size = 0x1000000
+  def maxProcess = 4092
+  def eihSize = 0x2128
+  def maxEih = 0x10
+  def eihControlSize = 0x80
 
+
+  def psOffset(index: Int) = index * 0x1000   // process i base address offset
+  def ipcOffset(index: Int) = psOffset(index) + 0x800   // process i IPC base address offset
+  def eihOffset = psOffset(maxProcess + 1)
+  def eihInnerOffset(index: Int) = eihOffset + eihControlSize + index * 0x8
 }
 
 case class ATSINTCParams(baseAddress: BigInt = ATSINTCConsts.base, intStages: Int = 0) {
@@ -59,6 +68,50 @@ class ATSINTC(params: ATSINTCParams, beatBytes: Int)(implicit p: Parameters) ext
   lazy val module = new LazyModuleImp(this) {
     Annotated.params(this, params)
 
+    // // The MMIO read write operations of External Interrupt Handler
+    // val eihRegFields = Seq.tabulate(maxEih) { i => 
+    //   // eihInnerOffset(i) -> Seq(
+    //   //   RegField(64,
+    //   //     RegReadFn { ready => (Bool(true), uirs(i).asUInt(63, 0)) },
+    //   //     RegWriteFn { (valid, data) =>
+    //   //       when(valid) {
+    //   //         uirs(i).hartid := data(31, 16)
+    //   //         uirs(i).mode := data(1)
+    //   //         uirs(i).active := data(0)
+    //   //       }
+    //   //       Bool(true)
+    //   //     },
+    //   //     Some(RegFieldDesc(
+    //   //       name = s"uirs_low_bits_$i",
+    //   //       desc = s"User interrupt basic status (active, mode and target hartid) of receiver $i"))),
+    //   // )
+
+    // }
+
+    // val psRegFields = Seq.tabulate(maxProcess) { i => 
+    //   // psOffset(i) -> Seq()
+
+    // }
+
+    // val ipcRegFields = Seq.tabulate(maxProcess) { i => 
+    //   // ipcOffset(i) -> Seq()
+
+    // }
+
+    // node.regmap((eihRegFields ++ psRegFields ++ ipcRegFields): _*)
+
+    
+    val testReg = Seq(0x00 -> Seq(
+      RegField(64,
+        RegReadFn { UInt(0x19990109) },
+        (),
+        Some(RegFieldDesc(
+          name = s"test",
+          desc = s"ATSINTC read"))),
+    ))
+
+    node.regmap((testReg): _*)
+    
   }
 }
 
