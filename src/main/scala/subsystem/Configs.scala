@@ -11,6 +11,7 @@ import freechips.rocketchip.diplomacy._
 import freechips.rocketchip.rocket._
 import freechips.rocketchip.tile._
 import freechips.rocketchip.util._
+import freechips.rocketchip.atsintc._
 
 class BaseSubsystemConfig extends Config ((site, here, up) => {
   // Tile parameters
@@ -42,6 +43,7 @@ class BaseSubsystemConfig extends Config ((site, here, up) => {
   case DebugModuleKey => Some(DefaultDebugModuleParams(site(XLen)))
   case CLINTKey => Some(CLINTParams())
   case PLICKey => Some(PLICParams())
+  case ATSINTCKey => Some(ATSINTCParams())
   case TilesLocated(InSubsystem) => 
     LegacyTileFieldHelper(site(RocketTilesKey), site(RocketCrossingKey), RocketTileAttachParams.apply _)
 })

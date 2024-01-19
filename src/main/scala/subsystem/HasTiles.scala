@@ -13,6 +13,7 @@ import freechips.rocketchip.tile.{BaseTile, LookupByHartIdImpl, TileParams, Inst
 import freechips.rocketchip.tilelink._
 import freechips.rocketchip.prci.{ClockGroup, ResetCrossingType}
 import freechips.rocketchip.util._
+import freechips.rocketchip.atsintc._
 
 /** Entry point for Config-uring the presence of Tiles */
 case class TilesLocated(loc: HierarchicalLocation) extends Field[Seq[CanAttachTile]](Nil)
@@ -101,6 +102,7 @@ case class TileSlavePortParams(
   */
 trait HasTileInterruptSources
   extends CanHavePeripheryPLIC
+  with CanHavePeripheryATSINTC
   with CanHavePeripheryCLINT
   with HasPeripheryDebug
   with InstantiatesTiles
