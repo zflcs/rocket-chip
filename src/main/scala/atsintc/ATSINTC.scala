@@ -3,7 +3,6 @@ package freechips.rocketchip.atsintc
 import Chisel._
 import freechips.rocketchip.config.{Field, Parameters}
 import freechips.rocketchip.diplomacy._
-import freechips.rocketchip.interrupts._
 import freechips.rocketchip.regmapper._
 import freechips.rocketchip.subsystem._
 import freechips.rocketchip.tilelink._
@@ -38,8 +37,6 @@ case object ATSINTCAttachKey extends Field(ATSINTCAttachParams())
 /** Asynchorous-Task-Scheduler-Interrupt Controller */
 class ATSINTC(params: ATSINTCParams, beatBytes: Int)(implicit p: Parameters) extends LazyModule {
 
-  import ATSINTCConsts._
-
   val device = new SimpleDevice("ats-intc", Seq("riscv,ats-intc0")) {
     override val alwaysExtended: Boolean = true
 
@@ -56,60 +53,24 @@ class ATSINTC(params: ATSINTCParams, beatBytes: Int)(implicit p: Parameters) ext
     beatBytes = beatBytes,
     concurrency = 1) // limiting concurrency handles RAW hazards on claim registers
 
-  val intnode: IntNexusNode = IntNexusNode(
-    sourceFn = { _ => IntSourcePortParameters(Seq(IntSourceParameters(1, Seq(Resource(device, "int"))))) },
-    sinkFn = { _ => IntSinkPortParameters(Seq(IntSinkParameters())) },
-    outputRequiresInput = false,
-    inputRequiresOutput = false)
-
-  /* Negotiated sizes */
-  def nHarts = intnode.edges.out.map(_.source.num).sum
-
   lazy val module = new LazyModuleImp(this) {
     Annotated.params(this, params)
 
-    // // The MMIO read write operations of External Interrupt Handler
-    // val eihRegFields = Seq.tabulate(maxEih) { i => 
-    //   // eihInnerOffset(i) -> Seq(
-    //   //   RegField(64,
-    //   //     RegReadFn { ready => (Bool(true), uirs(i).asUInt(63, 0)) },
-    //   //     RegWriteFn { (valid, data) =>
-    //   //       when(valid) {
-    //   //         uirs(i).hartid := data(31, 16)
-    //   //         uirs(i).mode := data(1)
-    //   //         uirs(i).active := data(0)
-    //   //       }
-    //   //       Bool(true)
-    //   //     },
-    //   //     Some(RegFieldDesc(
-    //   //       name = s"uirs_low_bits_$i",
-    //   //       desc = s"User interrupt basic status (active, mode and target hartid) of receiver $i"))),
-    //   // )
-
-    // }
-
-    // val psRegFields = Seq.tabulate(maxProcess) { i => 
-    //   // psOffset(i) -> Seq()
-
-    // }
-
-    // val ipcRegFields = Seq.tabulate(maxProcess) { i => 
-    //   // ipcOffset(i) -> Seq()
-
-    // }
-
-    // node.regmap((eihRegFields ++ psRegFields ++ ipcRegFields): _*)
-
-    
-    val testReg = Seq(0x00 -> Seq(
-      RegField(64,
-        RegReadFn { UInt(0x19990109) },
-        (),
-        Some(RegFieldDesc(
-          name = s"test",
-          desc = s"ATSINTC read"))),
-    ))
-
+    val tmp = RegInit(0.U(64.W))
+    val testReg = Seq(
+      0x00 -> Seq(RegField.r(64, RegReadFn { ready => 
+        when(ready) {
+          tmp := tmp - 1.U
+        }
+        (true.B, tmp)
+      })),
+      0x08 -> Seq(RegField.w(64, RegWriteFn { (valid, data) =>
+        when(valid) {
+          tmp := data
+        }
+        true.B
+      }))
+    )
     node.regmap((testReg): _*)
     
   }
