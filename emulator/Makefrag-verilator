@@ -55,7 +55,7 @@ $(VERILATOR_SRCDIR)/configure: verilator/verilator-$(VERILATOR_VERSION).tar.gz
 
 verilator/verilator-$(VERILATOR_VERSION).tar.gz:
 	mkdir -p $(dir $@)
-	# wget https://github.com/verilator/verilator/archive/refs/tags/v$(VERILATOR_VERSION).tar.gz -O $@
+	wget https://github.com/verilator/verilator/archive/refs/tags/v$(VERILATOR_VERSION).tar.gz -O $@
 
 verilator: $(INSTALLED_VERILATOR)
 
