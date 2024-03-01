@@ -56,10 +56,16 @@ class ATSINTC(params: ATSINTCParams, beatBytes: Int)(implicit p: Parameters) ext
   lazy val module = new LazyModuleImp(this) {
     Annotated.params(this, params)
 
-    val queue = Module(new Queue(UInt(64.W), 4))
+
+    val queue = Module(new DataArray(1024, 64))
     val testReg = Seq(
       0x00 -> Seq(RegField.r(64, queue.io.deq)),
-      0x08 -> Seq(RegField.w(64, queue.io.enq))
+      0x08 -> Seq(RegField.w(64, RegWriteFn{ (valid, data) => 
+        queue.io.position := 0.U
+        queue.io.enq.valid := valid
+        queue.io.enq.bits := data
+        queue.io.enq.ready
+      })),
     )
     node.regmap((testReg): _*)
     
