@@ -16,6 +16,9 @@ object ATSINTCConsts {
   def eihSize = 0x2128
   def maxEih = 0x10
   def eihControlSize = 0x80
+  def numPrio = 8
+  def dataWidth = 64
+  def capacity = 1024
 
 
   def psOffset(index: Int) = index * 0x1000   // process i base address offset
@@ -57,17 +60,13 @@ class ATSINTC(params: ATSINTCParams, beatBytes: Int)(implicit p: Parameters) ext
     Annotated.params(this, params)
 
 
-    val queue = Module(new DataArray(1024, 64))
-    val testReg = Seq(
-      0x00 -> Seq(RegField.r(64, queue.io.deq)),
-      0x08 -> Seq(RegField.w(64, RegWriteFn{ (valid, data) => 
-        queue.io.position := 0.U
-        queue.io.enq.valid := valid
-        queue.io.enq.bits := data
-        queue.io.enq.ready
-      })),
-    )
-    node.regmap((testReg): _*)
+    val queue = Module(new PriorityQueue(ATSINTCConsts.numPrio, ATSINTCConsts.capacity, ATSINTCConsts.dataWidth))
+    val deqReg = Seq(0x00 -> Seq(RegField.r(ATSINTCConsts.dataWidth, queue.io.deq)))
+    val enqRegs = Seq.tabulate(ATSINTCConsts.numPrio) { i =>
+      0x08 + 8 * i -> Seq(RegField.w(ATSINTCConsts.dataWidth, queue.io.enqs(i)))
+    }
+
+    node.regmap((deqReg ++ enqRegs): _*)
     
   }
 }

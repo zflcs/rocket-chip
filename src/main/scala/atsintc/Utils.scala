@@ -2,34 +2,6 @@ package freechips.rocketchip.atsintc
 
 import chisel3._
 import chisel3.util._
-import freechips.rocketchip.util.ShiftQueue
-
-
-class PriorityQueue(prioritys: Int, entriesPerQueue: Int, dataWidth: Int) extends Module {
-  val io = IO(new Bundle {
-    val deq = Decoupled(UInt(dataWidth.W))
-    val enq = Flipped(Decoupled(UInt(dataWidth.W)))
-    val enq_prio = Flipped(Valid(Input(UInt(log2Up(prioritys).W))))
-  })
-
-  private val inner_queues = Seq.fill(prioritys) { Module(new ShiftQueue(UInt(dataWidth.W), entriesPerQueue)) }
-  for(i <- 0 until prioritys) {
-    inner_queues(i).io.deq.ready := false.B
-    inner_queues(i).io.enq.valid := false.B
-  }
-  for(i <- 0 until prioritys) {
-    when(io.deq.ready && inner_queues(i).io.count > 0.U) {
-      io.deq.valid := true.B
-      io.deq.bits := inner_queues(i).io.deq.deq()
-    }
-  }
-  for(i <- 0 until prioritys) {
-    when(io.enq_prio.valid && io.enq_prio.bits === i.U) {
-      io.enq.ready := true.B
-      inner_queues(i).io.enq.enq(io.enq.bits)
-    }
-  }
-}
 
 class DataArray(capacity: Int, dataWidth: Int) extends Module {
     val io = IO(new Bundle {
@@ -43,7 +15,7 @@ class DataArray(capacity: Int, dataWidth: Int) extends Module {
     private val length = RegInit(0.U((log2Up(capacity) + 1).W))
 
     private val deq_valid = RegNext(io.deq.ready && (length > 0.U))
-    private val enq_valid = RegNext(io.enq.valid && (length < capacity.U))
+    private val enq_ready = RegNext(io.enq.valid && (length < capacity.U))
 
     // dequeue: when the consumer is ready to receive the data && the queue has data
     when(io.deq.ready && (length > 0.U) && deq_valid) {
@@ -54,7 +26,7 @@ class DataArray(capacity: Int, dataWidth: Int) extends Module {
     }
 
     // enqueue: when the producer has prepared the data && the queue is not full
-    when(io.enq.valid && (length < capacity.U) && enq_valid) {
+    when(io.enq.valid && (length < capacity.U) && enq_ready) {
       length := length + 1.U
       for(i <- 1 until capacity - 1) {
         when(i.U >= io.position + 1.U) {
@@ -67,5 +39,42 @@ class DataArray(capacity: Int, dataWidth: Int) extends Module {
     // output
     io.deq.bits := Mux(deq_valid, mem(0), 0.U)
     io.deq.valid := deq_valid
-    io.enq.ready := enq_valid
+    io.enq.ready := enq_ready
+}
+
+class PriorityQueue(numPrio: Int, capacity: Int, dataWidth: Int) extends Module {
+    val io = IO(new Bundle {
+        val enqs = Vec(numPrio, Flipped(DecoupledIO(UInt(dataWidth.W))))
+        val deq = Decoupled(UInt(dataWidth.W))
+    })
+    private val index_blocks = RegInit( VecInit(Seq.fill(numPrio + 1) { 0.U(log2Up(capacity).W) }))
+    private val sels = Cat(Seq.tabulate(numPrio) { i => io.enqs(numPrio - i - 1).valid })
+    private val current_index = Cat(0.U(1.W), PriorityEncoder(sels))
+    private val position = RegNext(index_blocks(current_index + 1.U))
+
+    private val data_array = Module(new DataArray(capacity, dataWidth))
+
+    data_array.io.position := position
+    data_array.io.enq.bits := io.enqs(current_index).bits
+    data_array.io.enq.valid := sels.asUInt() > 0.U
+    io.deq <> data_array.io.deq
+
+    private val enq_readys = Seq.tabulate(numPrio) { i => RegNext(sels(i)) }
+    for(i <- 0 until numPrio) {
+        io.enqs(i).ready := enq_readys(i)
+    }
+
+    // enqueue, the index behind the target priority + 1
+    for(i <- 0 until numPrio + 1) {
+        when(data_array.io.enq.valid && data_array.io.enq.ready && (i.U > current_index)) {
+            index_blocks(i) := index_blocks(i) + 1.U
+        }
+    }
+
+    // dequeue, the position in the index_blocks which is not zero, - 1 
+    for(i <- 0 until numPrio + 1) {
+        when(io.deq.ready && io.deq.valid && index_blocks(i) > 0.U) {
+            index_blocks(i) := index_blocks(i) - 1.U
+        }
+    }
 }
