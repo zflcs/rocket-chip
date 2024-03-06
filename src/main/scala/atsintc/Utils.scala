@@ -56,7 +56,7 @@ class PriorityQueue(numPrio: Int, capacity: Int, dataWidth: Int) extends Module 
 
     data_array.io.position := position
     data_array.io.enq.bits := io.enqs(current_index).bits
-    data_array.io.enq.valid := sels.asUInt() > 0.U
+    data_array.io.enq.valid := sels > 0.U
     io.deq <> data_array.io.deq
 
     private val enq_readys = Seq.tabulate(numPrio) { i => RegNext(sels(i)) }
@@ -78,3 +78,47 @@ class PriorityQueue(numPrio: Int, capacity: Int, dataWidth: Int) extends Module 
         }
     }
 }
+
+
+class PQWithExtIntrHandler(numIntr: Int, bq_capacity: Int, numPrio: Int, capacity: Int, dataWidth: Int) extends Module {
+    val io = IO(new Bundle {
+        val enqs = Vec(numPrio, Flipped(DecoupledIO(UInt(dataWidth.W))))
+        val deq = Decoupled(UInt(dataWidth.W))
+        val intrs = Vec(numIntr, Input(Bool()))
+        val intrh_enqs = Vec(numIntr, Flipped(DecoupledIO(UInt(dataWidth.W))))
+    })
+
+    // Connect the priority queue
+    private val pq = Module(new PriorityQueue(numPrio, capacity, dataWidth))
+    io.deq <> pq.io.deq
+    // except priority 0
+    for(i <- 1 until numPrio) {
+        pq.io.enqs(i) <> io.enqs(i)
+    }
+
+    // connect interrupt handler queue
+    private val inFlights0 = Seq.tabulate(numIntr) { i => 
+        RegNext(io.intrs(i))
+    }
+    private val inFlights1 = Seq.tabulate(numIntr) { i => 
+        RegNext(io.intrs(i) && !inFlights0(i))
+    }
+    private val intr_hqs = Seq.fill(numIntr) { 
+        val q = Module(new DataArray(bq_capacity, dataWidth)) 
+        q.io.position := 0.U
+        q
+    }
+    private val arb = Module(new Arbiter(UInt(dataWidth.W), numIntr + 1))
+    for(i <- 0 until numIntr) {
+        intr_hqs(i).io.enq <> io.intrh_enqs(i)
+        intr_hqs(i).io.deq.ready := (io.intrs(i) && !inFlights0(i)) || inFlights1(i)
+        // arb.io.in(i) <> intr_hqs(i).io.deq
+        arb.io.in(i).bits := RegNext(intr_hqs(i).io.deq.bits)
+        arb.io.in(i).valid := intr_hqs(i).io.deq.valid
+
+    }
+    arb.io.in(numIntr) <> io.enqs(0)
+    pq.io.enqs(0) <> arb.io.out
+
+}
+
