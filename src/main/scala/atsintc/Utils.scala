@@ -8,11 +8,13 @@ class DataArray(capacity: Int, dataWidth: Int) extends Module {
         val enq = Flipped(Decoupled(UInt(dataWidth.W)))
         val deq = Decoupled(UInt(dataWidth.W))
         val position = Input(UInt(log2Up(capacity).W))
+        val length = Output(UInt((log2Up(capacity) + 1).W))
     })
     val size = capacity
     private val mem = RegInit(VecInit(Seq.fill(capacity)(0.U(dataWidth.W))))
 
-    private val length = RegInit(0.U((log2Up(capacity) + 1).W))
+    val length = RegInit(0.U((log2Up(capacity) + 1).W))
+    io.length := length
 
     private val deq_valid = RegNext(io.deq.ready && (length > 0.U))
     private val enq_ready = RegNext(io.enq.valid && (length < capacity.U))
@@ -104,8 +106,8 @@ class PQWithExtIntrHandler(numIntr: Int, bq_capacity: Int, numPrio: Int, capacit
         RegNext(io.intrs(i) && !inFlights0(i))
     }
     private val intr_hqs = Seq.fill(numIntr) { 
-        val q = Module(new DataArray(bq_capacity, dataWidth)) 
-        q.io.position := 0.U
+        val q = Module(new DataArray(bq_capacity, dataWidth))
+        q.io.position := q.io.length
         q
     }
     private val arb = Module(new Arbiter(UInt(dataWidth.W), numIntr + 1))

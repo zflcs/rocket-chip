@@ -20,6 +20,7 @@ object ATSINTCConsts {
   def numPrio = 8
   def dataWidth = 64
   def capacity = 1024
+  def bq_capacity = 128
 
 
   def psOffset(index: Int) = index * 0x1000   // process i base address offset
@@ -73,7 +74,7 @@ class ATSINTC(params: ATSINTCParams, beatBytes: Int)(implicit p: Parameters) ext
     
     println(s"ATSINTC map ${nDevices} external interrupts:")
 
-    val queue = Module(new PQWithExtIntrHandler(nDevices, 256, ATSINTCConsts.numPrio, ATSINTCConsts.capacity, ATSINTCConsts.dataWidth))
+    val queue = Module(new PQWithExtIntrHandler(nDevices, ATSINTCConsts.bq_capacity, ATSINTCConsts.numPrio, ATSINTCConsts.capacity, ATSINTCConsts.dataWidth))
     for(i <- 0 until nDevices) {
       queue.io.intrs(i) := interrupts(i)
     }
