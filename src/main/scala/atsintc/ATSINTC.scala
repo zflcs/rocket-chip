@@ -19,8 +19,8 @@ object ATSINTCConsts {
   def eihControlSize = 0x80
   def numPrio = 8
   def dataWidth = 64
-  def capacity = 1024
-  def bq_capacity = 128
+  def capacity = 128
+  def bq_capacity = 16
 
 
   def psOffset(index: Int) = index * 0x1000   // process i base address offset
@@ -83,17 +83,17 @@ class ATSINTC(params: ATSINTCParams, beatBytes: Int)(implicit p: Parameters) ext
     val enqRegs = Seq.tabulate(ATSINTCConsts.numPrio) { i =>
       0x08 + 8 * i -> Seq(RegField.w(ATSINTCConsts.dataWidth, queue.io.enqs(i)))
     }
-    val simExtIntrRegs = Seq.tabulate(nDevices) { i => 
-      0x200000 + 8 * i -> Seq(RegField.w(ATSINTCConsts.dataWidth, RegWriteFn { (valid, data) =>
-        queue.io.intrs(i) := valid
-        true.B
-      }))
-    }
+    // val simExtIntrRegs = Seq.tabulate(nDevices) { i => 
+    //   0x200000 + 8 * i -> Seq(RegField.w(ATSINTCConsts.dataWidth, RegWriteFn { (valid, data) =>
+    //     queue.io.intrs(i) := valid
+    //     true.B
+    //   }))
+    // }
     val extintrRegs = Seq.tabulate(nDevices) { i =>
       0xFFD000 + 8 * i -> Seq(RegField.w(ATSINTCConsts.dataWidth, queue.io.intrh_enqs(i)))
     }
 
-    node.regmap((deqReg ++ enqRegs ++ simExtIntrRegs ++ extintrRegs): _*)
+    node.regmap((deqReg ++ enqRegs ++ extintrRegs): _*)
     
   }
 }
