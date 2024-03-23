@@ -16,7 +16,7 @@ class DataArray(capacity: Int, dataWidth: Int) extends Module {
     val length = RegInit(0.U((log2Up(capacity) + 1).W))
     io.length := length
 
-    private val deq_valid = RegNext(io.deq.ready && (length > 0.U))
+    private val deq_valid = RegNext(io.deq.ready)
     private val enq_ready = RegNext(io.enq.valid && (length < capacity.U))
 
     // dequeue: when the consumer is ready to receive the data && the queue has data
