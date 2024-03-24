@@ -2,6 +2,7 @@ package freechips.rocketchip.atsintc
 
 import chisel3._
 import chisel3.util._
+import freechips.rocketchip.util.ShiftQueue
 
 class DataArray(capacity: Int, dataWidth: Int) extends Module {
     val io = IO(new Bundle {
@@ -103,21 +104,22 @@ class PQWithExtIntrHandler(numIntr: Int, bq_capacity: Int, numPrio: Int, capacit
         RegNext(io.intrs(i))
     }
     private val inFlights1 = Seq.tabulate(numIntr) { i => 
-        RegNext(io.intrs(i) && !inFlights0(i))
+        RegNext(inFlights0(i))
     }
-    private val intr_hqs = Seq.fill(numIntr) { 
-        val q = Module(new DataArray(bq_capacity, dataWidth))
-        q.io.position := q.io.length
+    private val inFlights2 = Seq.tabulate(numIntr) { i => 
+        RegNext(inFlights0(i) && !inFlights1(i))
+    }
+    private val intr_hqs = Seq.tabulate(numIntr) { i =>
+        val q = Module(new ShiftQueue(UInt(dataWidth.W), bq_capacity))
+        // Connect the input wire
+        q.io.enq <> io.intrh_enqs(i)
         q
     }
     private val arb = Module(new Arbiter(UInt(dataWidth.W), numIntr + 1))
     for(i <- 0 until numIntr) {
-        intr_hqs(i).io.enq <> io.intrh_enqs(i)
-        intr_hqs(i).io.deq.ready := (io.intrs(i) && !inFlights0(i)) || inFlights1(i)
-        // arb.io.in(i) <> intr_hqs(i).io.deq
+        intr_hqs(i).io.deq.ready := inFlights0(i) && !inFlights1(i)
         arb.io.in(i).bits := RegNext(intr_hqs(i).io.deq.bits)
-        arb.io.in(i).valid := intr_hqs(i).io.deq.valid
-
+        arb.io.in(i).valid := (inFlights0(i) && !inFlights1(i) || inFlights2(i)) && RegNext(intr_hqs(i).io.deq.valid)
     }
     arb.io.in(numIntr) <> io.enqs(0)
     pq.io.enqs(0) <> arb.io.out
