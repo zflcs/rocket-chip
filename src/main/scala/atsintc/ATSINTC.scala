@@ -83,17 +83,18 @@ class ATSINTC(params: ATSINTCParams, beatBytes: Int)(implicit p: Parameters) ext
     val enqRegs = Seq.tabulate(ATSINTCConsts.numPrio) { i =>
       0x08 + 8 * i -> Seq(RegField.w(ATSINTCConsts.dataWidth, queue.io.enqs(i)))
     }
-    // val simExtIntrRegs = Seq.tabulate(nDevices) { i => 
-    //   0x200000 + 8 * i -> Seq(RegField.w(ATSINTCConsts.dataWidth, RegWriteFn { (valid, data) =>
-    //     queue.io.intrs(i) := valid
-    //     true.B
-    //   }))
-    // }
+    val simExtIntrRegs = Seq.tabulate(nDevices) { i => 
+      0x200000 + 8 * i -> Seq(RegField.w(ATSINTCConsts.dataWidth, RegWriteFn { (valid, data) =>
+        val tmp = RegNext(valid)
+        queue.io.intrs(i) := valid || tmp
+        true.B
+      }))
+    }
     val extintrRegs = Seq.tabulate(nDevices) { i =>
       0x900 + 8 * i -> Seq(RegField.w(ATSINTCConsts.dataWidth, queue.io.intrh_enqs(i)))
     }
 
-    node.regmap((deqReg ++ enqRegs ++ extintrRegs): _*)
+    node.regmap((deqReg ++ enqRegs ++ extintrRegs ++ simExtIntrRegs): _*)
     
   }
 }

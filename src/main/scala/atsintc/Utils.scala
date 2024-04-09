@@ -4,6 +4,7 @@ import chisel3._
 import chisel3.util._
 import freechips.rocketchip.util.ShiftQueue
 
+// This is the data array which can store some information according their priority.
 class DataArray(capacity: Int, dataWidth: Int) extends Module {
     val io = IO(new Bundle {
         val enq = Flipped(Decoupled(UInt(dataWidth.W)))
@@ -45,6 +46,7 @@ class DataArray(capacity: Int, dataWidth: Int) extends Module {
     io.enq.ready := enq_ready
 }
 
+// Define the priority interface of the DataArray.
 class PriorityQueue(numPrio: Int, capacity: Int, dataWidth: Int) extends Module {
     val io = IO(new Bundle {
         val enqs = Vec(numPrio, Flipped(DecoupledIO(UInt(dataWidth.W))))
@@ -82,7 +84,33 @@ class PriorityQueue(numPrio: Int, capacity: Int, dataWidth: Int) extends Module 
     }
 }
 
+// The interrupt gateway
+// When the gateway is open / close, it can/can't receive interrupt from device.
+class BQWithGateway(bq_capacity: Int, dataWidth: Int) extends Module {
+    val io = IO(new Bundle {
+        val interrupt = Input(Bool())
+        val enq = Flipped(DecoupledIO(UInt(dataWidth.W)))
+        val deq =  ValidIO(UInt(dataWidth.W))
+    })
+    val gateway = RegInit(false.B)
+    private val queue = Module(new ShiftQueue(UInt(dataWidth.W), bq_capacity))
+    // connect the enqueue interface with inner queue
+    queue.io.enq <> io.enq
+    // When the blocked task enqueue successfully, the gateway will be opened.
+    when(io.enq.fire) { gateway := true.B }
+    // When the blocked task dequeue successfully, the gateway will be closed. 
+    when(queue.io.deq.fire) { gateway := false.B }
 
+    private val inFlight0 = RegNext(gateway && io.interrupt)
+    private val inFlight1 = RegNext(inFlight0)
+    queue.io.deq.ready := inFlight0 && !inFlight1
+    io.deq.bits := queue.io.deq.bits
+
+    io.deq.valid := inFlight0
+}
+
+
+// Interated device blocked task queue within the PriorityQueue.
 class PQWithExtIntrHandler(numIntr: Int, bq_capacity: Int, numPrio: Int, capacity: Int, dataWidth: Int) extends Module {
     val io = IO(new Bundle {
         val enqs = Vec(numPrio, Flipped(DecoupledIO(UInt(dataWidth.W))))
@@ -99,30 +127,19 @@ class PQWithExtIntrHandler(numIntr: Int, bq_capacity: Int, numPrio: Int, capacit
         pq.io.enqs(i) <> io.enqs(i)
     }
 
-    // connect interrupt handler queue
-    private val inFlights0 = Seq.tabulate(numIntr) { i => 
-        RegNext(io.intrs(i))
-    }
-    private val inFlights1 = Seq.tabulate(numIntr) { i => 
-        RegNext(inFlights0(i))
-    }
-    private val inFlights2 = Seq.tabulate(numIntr) { i => 
-        RegNext(inFlights0(i) && !inFlights1(i))
-    }
     private val intr_hqs = Seq.tabulate(numIntr) { i =>
-        val q = Module(new ShiftQueue(UInt(dataWidth.W), bq_capacity))
+        val q = Module(new BQWithGateway(bq_capacity, dataWidth))
         // Connect the input wire
         q.io.enq <> io.intrh_enqs(i)
+        q.io.interrupt := io.intrs(i)
         q
     }
     private val arb = Module(new Arbiter(UInt(dataWidth.W), numIntr + 1))
     for(i <- 0 until numIntr) {
-        intr_hqs(i).io.deq.ready := inFlights0(i) && !inFlights1(i)
         arb.io.in(i).bits := RegNext(intr_hqs(i).io.deq.bits)
-        arb.io.in(i).valid := (inFlights0(i) && !inFlights1(i) || inFlights2(i)) && RegNext(intr_hqs(i).io.deq.valid)
+        arb.io.in(i).valid := intr_hqs(i).io.deq.valid
     }
     arb.io.in(numIntr) <> io.enqs(0)
     pq.io.enqs(0) <> arb.io.out
 
 }
-
