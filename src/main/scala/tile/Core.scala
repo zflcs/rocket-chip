@@ -15,6 +15,7 @@ case object MaxHartIdBits extends Field[Int]
 trait CoreParams {
   val bootFreqHz: BigInt
   val useVM: Boolean
+  val useNE: Boolean
   val useHypervisor: Boolean
   val useUser: Boolean
   val useSupervisor: Boolean

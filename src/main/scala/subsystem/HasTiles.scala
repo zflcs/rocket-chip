@@ -13,6 +13,7 @@ import freechips.rocketchip.tile.{BaseTile, LookupByHartIdImpl, TileParams, Inst
 import freechips.rocketchip.tilelink._
 import freechips.rocketchip.prci.{ClockGroup, ResetCrossingType}
 import freechips.rocketchip.util._
+import freechips.rocketchip.taic.CanHavePeripheryTAIC
 
 /** Entry point for Config-uring the presence of Tiles */
 case class TilesLocated(loc: HierarchicalLocation) extends Field[Seq[CanAttachTile]](Nil)
@@ -101,6 +102,7 @@ case class TileSlavePortParams(
   */
 trait HasTileInterruptSources
   extends CanHavePeripheryPLIC
+  with CanHavePeripheryTAIC
   with CanHavePeripheryCLINT
   with HasPeripheryDebug
   with InstantiatesTiles
@@ -315,6 +317,13 @@ trait CanAttachTile {
       domain.crossIntIn(crossingParams.crossingType) :=
         context.plicOpt .map { _.intnode }
           .getOrElse { context.seipNode.get }
+    }
+
+    //    From TAIC: "ssip", "usip" (only if user mode is enabled)
+    if (domain.tile.tileParams.core.useNE) {
+      domain.crossIntIn(crossingParams.crossingType) :=
+        context.taicOpt.map { _.intnode }
+          .getOrElse { NullIntSource() }
     }
 
     // 3. Local Interrupts ("lip") are required to already be synchronous to the Tile's clock.

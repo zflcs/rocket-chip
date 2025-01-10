@@ -43,6 +43,7 @@ trait HasNonDiplomaticTileParameters {
   def tileParams: TileParams = p(TileKey)
 
   def usingVM: Boolean = tileParams.core.useVM
+  def usingNE: Boolean = tileParams.core.useNE
   def usingUser: Boolean = tileParams.core.useUser || usingSupervisor
   def usingSupervisor: Boolean = tileParams.core.hasSupervisorMode
   def usingHypervisor: Boolean = usingVM && tileParams.core.useHypervisor

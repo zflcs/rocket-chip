@@ -21,6 +21,8 @@ class TileInterrupts(implicit p: Parameters) extends CoreBundle()(p) {
   val msip = Bool()
   val meip = Bool()
   val seip = usingSupervisor.option(Bool())
+  val ssip = usingNE.option(Bool())
+  val usip = usingNE.option(Bool())
   val lip = Vec(coreParams.nLocalInterrupts, Bool())
   val nmi = usingNMI.option(new NMI(resetVectorLen))
 }
@@ -62,8 +64,10 @@ trait SinksExternalInterrupts { this: BaseTile =>
   // debug, msip, mtip, meip, seip, lip offsets in CSRs
   def csrIntMap: List[Int] = {
     val nlips = tileParams.core.nLocalInterrupts
+    val usip = if (usingNE) Seq(0) else Nil
+    val ssip = if (usingNE) Seq(1) else Nil
     val seip = if (usingSupervisor) Seq(9) else Nil
-    List(65535, 3, 7, 11) ++ seip ++ List.tabulate(nlips)(_ + 16)
+    List(65535, 3, 7, 11) ++ seip ++ ssip ++ usip ++ List.tabulate(nlips)(_ + 16)
   }
 
   // go from flat diplomatic Interrupts to bundled TileInterrupts
@@ -75,11 +79,13 @@ trait SinksExternalInterrupts { this: BaseTile =>
       core.meip)
 
     val seip = if (core.seip.isDefined) Seq(core.seip.get) else Nil
+    val ssip = if (core.ssip.isDefined) Seq(core.ssip.get) else Nil
+    val usip = if (core.usip.isDefined) Seq(core.usip.get) else Nil
 
     val core_ips = core.lip
 
     val (interrupts, _) = intSinkNode.in(0)
-    (async_ips ++ periph_ips ++ seip ++ core_ips).zip(interrupts).foreach { case(c, i) => c := i }
+    (async_ips ++ periph_ips ++ seip ++ ssip ++ usip ++ core_ips).zip(interrupts).foreach { case(c, i) => c := i }
   }
 }
 
